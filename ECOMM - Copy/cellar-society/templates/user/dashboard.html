@@ -1,0 +1,739 @@
+{% extends "user/base.html" %}
+
+{% block title %}User Dashboard - Cellar Society{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Welcome, {{ customer_name or session.customer_username }}!</h2>
+  <p class="subtitle">You are now logged in to the Cellar Society.</p>
+
+  <div class="search-section">
+    <div class="search-wrapper">
+      <div class="search-input-container">
+        <input type="text" id="searchInput" placeholder="Search by wine name or region..." oninput="filterProducts()"
+          onfocus="showSearchHistory()" onblur="hideSearchHistory()">
+        <div class="search-history" id="searchHistory">
+          <div class="search-history-header">
+            <span>Recent Searches</span>
+            <button class="clear-history-btn" onclick="clearSearchHistory()">Clear All</button>
+          </div>
+          <div class="search-history-items" id="searchHistoryItems">
+            <!-- Search history items will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <select id="typeFilter" onchange="filterProducts()">
+        <option value="">All Types</option>
+        <option value="Red">Red Wine</option>
+        <option value="White">White Wine</option>
+        <option value="Rosé">Rosé Wine</option>
+        <option value="Sparkling">Sparkling Wine</option>
+        <option value="Dessert">Dessert Wine</option>
+        <option value="Fortified">Fortified Wine</option>
+      </select>
+
+      <button id="clearBtn" onclick="clearSearch()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<div class="product-container" id="productContainer">
+  {% for product in products %}
+  <div class="product-card" data-name="{{ product['name']|e }}" data-type="{{ product['type']|e }}"
+    data-region="{{ product['region']|e }}" data-vintage="{{ product['vintage']|e }}" data-price="{{ "
+    %.2f"|format(product['price']) }}" data-alcohol="{{ product['alcohol']|e }}" data-stock="{{ product['stock']|e }}"
+    data-description="{{ product['description']|e }}"
+    data-image="{{ product['image_url']|default('/static/default.png')|e }}" data-id="{{ product['id'] }}"
+    onclick="openModal(this)">
+    <div class="product-image">
+      <img src="{{ product['image_url']|default('/static/default.png') }}" alt="{{ product['name'] }}">
+    </div>
+    <div class="product-summary">
+      <div>
+        <h3>{{ product['name'] }}</h3>
+        <p class="price">₱{{ "%.2f"|format(product['price']) }}</p>
+      </div>
+      <p class="type">{{ product['type'] }}</p>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">No products available at the moment.</p>
+  {% endfor %}
+</div>
+
+<!-- Modal will be inserted here by JavaScript -->
+<div id="modalContainer"></div>
+{% endblock %}
+
+{% block styles %}
+<style>
+  /* Header Layout */
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .welcome-text {
+    flex: 1;
+    min-width: 300px;
+  }
+
+  .search-filter-container {
+    flex: 1;
+    max-width: 500px;
+    min-width: 300px;
+  }
+
+  /* Subtitle style to match "Manage your wine inventory." */
+  .subtitle {
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.1em;
+    color: #888;
+    margin-bottom: 24px;
+  }
+
+  /* Search Section */
+  .search-section {
+    background: var(--card-bg);
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    display: flex;
+    justify-content: center;
+  }
+
+  .search-wrapper {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    max-width: 900px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  /* Search Input Container */
+  .search-input-container {
+    flex: 2;
+    min-width: 250px;
+    position: relative;
+  }
+
+  /* Input and dropdown */
+  .search-wrapper input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e0da;
+    border-radius: 10px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    background: #fff;
+    transition: border 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .search-wrapper select {
+    flex: 1;
+    min-width: 180px;
+    max-width: 220px;
+    padding: 12px 16px;
+    border: 2px solid #e5e0da;
+    border-radius: 10px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    background: #fff;
+    transition: border 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+  }
+
+  .search-wrapper input::placeholder {
+    color: #aaa;
+  }
+
+  .search-wrapper input:focus,
+  .search-wrapper select:focus {
+    border-color: #c6a664;
+    box-shadow: 0 0 6px rgba(198, 166, 100, 0.3);
+    outline: none;
+  }
+
+  /* Clear Button */
+  .search-wrapper button {
+    flex: 0 0 auto;
+    min-width: 100px;
+    max-width: 120px;
+    background: transparent;
+    color: var(--muted);
+    border: 2px solid #e5e0da;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+  }
+
+  .search-wrapper button:hover {
+    background: #5a2a27;
+    color: #fff;
+    border-color: #5a2a27;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(90, 42, 39, 0.25);
+  }
+
+  /* Search History Dropdown */
+  .search-history {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid #e5e0da;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .search-history.show {
+    display: block;
+  }
+
+  .search-history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fafafa;
+  }
+
+  .search-history-header span {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 14px;
+  }
+
+  .clear-history-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .clear-history-btn:hover {
+    background: #f0f0f0;
+    color: var(--danger);
+  }
+
+  .search-history-items {
+    padding: 8px 0;
+  }
+
+  .search-history-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f8f8f8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .search-history-item:last-child {
+    border-bottom: none;
+  }
+
+  .search-history-item:hover {
+    background: #f8f8f8;
+  }
+
+  .search-history-term {
+    flex: 1;
+    color: var(--text);
+  }
+
+  .search-history-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    font-size: 14px;
+    opacity: 0;
+    transition: all 0.2s ease;
+  }
+
+  .search-history-item:hover .search-history-remove {
+    opacity: 1;
+  }
+
+  .search-history-remove:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  /* Product Container - Fixed Size Cards */
+  .product-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 28px;
+    margin-top: 20px;
+  }
+
+  .product-card {
+    background: var(--card-bg);
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    height: 340px;
+    /* Fixed height */
+    min-height: 340px;
+    /* Ensure minimum height */
+    max-height: 340px;
+    /* Ensure maximum height */
+    display: flex;
+    flex-direction: column;
+  }
+
+  .product-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  }
+
+  .product-image {
+    width: 100%;
+    height: 200px;
+    /* Fixed image height */
+    overflow: hidden;
+    flex-shrink: 0;
+    /* Prevent image from shrinking */
+  }
+
+  .product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .product-card:hover .product-image img {
+    transform: scale(1.05);
+  }
+
+  .product-summary {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 140px;
+    /* Ensure consistent summary height */
+  }
+
+  .product-summary h3 {
+    font-family: 'Playfair Display', serif;
+    /* Same as header */
+    font-size: 1.2em;
+    color: var(--primary);
+    margin-bottom: 6px;
+  }
+
+  .product-summary .price {
+    font-family: 'Poppins', sans-serif;
+    color: var(--accent);
+    /* #c6a664 color */
+    font-weight: 600;
+    font-size: 1.1em;
+    /* Smaller than product name */
+    margin-bottom: 4px;
+  }
+
+  .product-summary .type {
+    font-family: 'Poppins', sans-serif;
+    color: var(--muted);
+    font-size: 0.9em;
+    font-style: italic;
+  }
+
+  /* Empty State */
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 1.1em;
+    grid-column: 1 / -1;
+    padding: 40px;
+  }
+
+  /* No Results Message */
+  .no-results {
+    text-align: center;
+    color: var(--muted);
+    font-size: 1.1em;
+    grid-column: 1 / -1;
+    padding: 40px;
+  }
+
+  .no-results.hidden {
+    display: none;
+  }
+
+  /* Mobile layout */
+  @media (max-width: 768px) {
+    .search-wrapper {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .search-input-container {
+      flex: 1;
+      min-width: auto;
+    }
+
+    .search-wrapper input,
+    .search-wrapper select,
+    .search-wrapper button {
+      width: 100%;
+      max-width: none;
+      min-width: auto;
+    }
+
+    .product-container {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .product-card {
+      height: 320px;
+      min-height: 320px;
+      max-height: 320px;
+    }
+
+    .product-image {
+      height: 180px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .product-container {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .product-card {
+      height: 300px;
+      min-height: 300px;
+      max-height: 300px;
+    }
+
+    .product-image {
+      height: 160px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Search History Management
+  const SEARCH_HISTORY_KEY = 'wineSearchHistory';
+  const MAX_HISTORY_ITEMS = 5;
+  let searchTimeout = null;
+
+  function getSearchHistory() {
+    const history = localStorage.getItem(SEARCH_HISTORY_KEY);
+    return history ? JSON.parse(history) : [];
+  }
+
+  function saveSearchHistory(history) {
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+  }
+
+  function addToSearchHistory(searchTerm) {
+    if (!searchTerm.trim()) return;
+
+    let history = getSearchHistory();
+
+    // Remove if already exists
+    history = history.filter(item => item !== searchTerm);
+
+    // Add to beginning
+    history.unshift(searchTerm);
+
+    // Keep only the most recent items
+    if (history.length > MAX_HISTORY_ITEMS) {
+      history = history.slice(0, MAX_HISTORY_ITEMS);
+    }
+
+    saveSearchHistory(history);
+    renderSearchHistory();
+  }
+
+  function removeFromSearchHistory(searchTerm) {
+    let history = getSearchHistory();
+    history = history.filter(item => item !== searchTerm);
+    saveSearchHistory(history);
+    renderSearchHistory();
+  }
+
+  function clearSearchHistory() {
+    saveSearchHistory([]);
+    renderSearchHistory();
+    hideSearchHistory();
+  }
+
+  function renderSearchHistory() {
+    const history = getSearchHistory();
+    const container = document.getElementById('searchHistoryItems');
+
+    if (history.length === 0) {
+      container.innerHTML = '<div class="search-history-item" style="color: var(--muted); font-style: italic;">No recent searches</div>';
+      return;
+    }
+
+    container.innerHTML = history.map(term => `
+        <div class="search-history-item" onclick="useSearchHistory('${term}')">
+            <span class="search-history-term">${term}</span>
+            <button class="search-history-remove" onclick="event.stopPropagation(); removeFromSearchHistory('${term}')">×</button>
+        </div>
+    `).join('');
+  }
+
+  function useSearchHistory(term) {
+    document.getElementById('searchInput').value = term;
+    filterProducts();
+    hideSearchHistory();
+  }
+
+  function showSearchHistory() {
+    const historyElement = document.getElementById('searchHistory');
+    historyElement.classList.add('show');
+    renderSearchHistory();
+  }
+
+  function hideSearchHistory() {
+    // Small delay to allow click events to register
+    setTimeout(() => {
+      const historyElement = document.getElementById('searchHistory');
+      historyElement.classList.remove('show');
+    }, 200);
+  }
+
+  // Handle search input with debounce and Enter key
+  function handleSearchInput() {
+    const searchInput = document.getElementById('searchInput');
+
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout to filter after user stops typing
+    searchTimeout = setTimeout(() => {
+      filterProducts(false); // Don't save to history for typing
+    }, 500); // Wait 500ms after user stops typing
+  }
+
+  // Handle Enter key to save search
+  function handleSearchKeydown(event) {
+    if (event.key === 'Enter') {
+      // Clear the typing timeout
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+
+      const searchTerm = document.getElementById('searchInput').value.trim();
+      if (searchTerm) {
+        addToSearchHistory(searchTerm);
+      }
+      filterProducts(false); // Filter without saving (we already saved above)
+    }
+  }
+
+  function openModal(card) {
+    console.log("DEBUG: Opening modal for product:", card.dataset.id);
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'modalOverlay';
+    overlay.onclick = closeModal;
+
+    // Create expanded card
+    const expanded = document.createElement('div');
+    expanded.className = 'expanded-card';
+    expanded.innerHTML = `
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+        <div class="product-image">
+            <img src="${card.dataset.image}" alt="${card.dataset.name}">
+        </div>
+        <div class="product-info">
+            <h3>${card.dataset.name}</h3>
+            <div class="product-details-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Type:</span>
+                    <span class="detail-value">${card.dataset.type}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Region:</span>
+                    <span class="detail-value">${card.dataset.region}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Vintage:</span>
+                    <span class="detail-value">${card.dataset.vintage}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Alcohol:</span>
+                    <span class="detail-value">${card.dataset.alcohol}%</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Stock:</span>
+                    <span class="detail-value ${card.dataset.stock <= 5 ? 'low-stock' : ''}">${card.dataset.stock} bottles</span>
+                </div>
+                <div class="detail-item price-item">
+                    <span class="detail-label">Price:</span>
+                    <span class="detail-value price">₱${card.dataset.price}</span>
+                </div>
+            </div>
+            <div class="description-section">
+                <h4>Description</h4>
+                <p class="description">${card.dataset.description}</p>
+            </div>
+        </div>
+        <div class="buttons">
+            <form action="/user/add_to_cart/${card.dataset.id}" method="POST">
+                <button class="btn primary" type="submit" ${card.dataset.stock <= 0 ? 'disabled' : ''}>
+                    ${card.dataset.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}
+                </button>
+            </form>
+            <form action="/user/checkout" method="POST">
+                <input type="hidden" name="buy_now_product" value="${card.dataset.id}">
+                <button class="btn accent" type="submit" ${card.dataset.stock <= 0 ? 'disabled' : ''}>
+                    ${card.dataset.stock <= 0 ? 'Out of Stock' : 'Buy Now'}
+                </button>
+            </form>
+        </div>
+    `;
+
+    // Add to modal container
+    const modalContainer = document.getElementById('modalContainer');
+    modalContainer.appendChild(overlay);
+    modalContainer.appendChild(expanded);
+
+    // Prevent body scroll when modal is open
+    document.body.classList.add('modal-open');
+  }
+
+
+  function closeModal() {
+    const overlay = document.getElementById('modalOverlay');
+    const expanded = document.querySelector('.expanded-card');
+
+    if (overlay) overlay.remove();
+    if (expanded) expanded.remove();
+
+    // Restore body scroll
+    document.body.classList.remove('modal-open');
+  }
+
+  function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('typeFilter').value = '';
+    filterProducts(false); // Don't save empty search to history
+  }
+
+  // Filter Products Function
+  function filterProducts(saveToHistory = false) {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const typeFilter = document.getElementById('typeFilter').value;
+    const productContainer = document.getElementById('productContainer');
+    const productCards = productContainer.querySelectorAll('.product-card');
+    const emptyMessage = productContainer.querySelector('.empty');
+
+    let visibleCount = 0;
+
+    productCards.forEach(card => {
+      const name = card.dataset.name.toLowerCase();
+      const region = card.dataset.region.toLowerCase();
+      const type = card.dataset.type;
+
+      const matchesSearch = name.includes(searchTerm) || region.includes(searchTerm);
+      const matchesType = !typeFilter || type === typeFilter;
+
+      if (matchesSearch && matchesType) {
+        card.style.display = 'block';
+        visibleCount++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    // Add search term to history only if explicitly requested
+    if (saveToHistory && searchTerm.trim()) {
+      addToSearchHistory(searchTerm);
+    }
+
+    // Handle empty state
+    if (emptyMessage) {
+      if (visibleCount === 0 && (searchTerm || typeFilter)) {
+        // Create or show no results message
+        let noResults = productContainer.querySelector('.no-results');
+        if (!noResults) {
+          noResults = document.createElement('p');
+          noResults.className = 'no-results';
+          noResults.textContent = 'No products found matching your criteria.';
+          productContainer.appendChild(noResults);
+        } else {
+          noResults.classList.remove('hidden');
+        }
+        emptyMessage.style.display = 'none';
+      } else if (visibleCount === 0) {
+        // Show original empty message
+        emptyMessage.style.display = 'block';
+        const noResults = productContainer.querySelector('.no-results');
+        if (noResults) noResults.classList.add('hidden');
+      } else {
+        // Hide both messages when products are visible
+        emptyMessage.style.display = 'none';
+        const noResults = productContainer.querySelector('.no-results');
+        if (noResults) noResults.classList.add('hidden');
+      }
+    }
+  }
+
+  // Close modal with Escape key
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      closeModal();
+    }
+  });
+
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', function () {
+    // Update the search input event listeners
+    const searchInput = document.getElementById('searchInput');
+    searchInput.oninput = handleSearchInput;
+    searchInput.onkeydown = handleSearchKeydown;
+
+    filterProducts(false);
+    renderSearchHistory();
+  });
+</script>
+{% endblock %}

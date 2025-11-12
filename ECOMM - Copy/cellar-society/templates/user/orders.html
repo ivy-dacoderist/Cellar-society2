@@ -1,0 +1,707 @@
+{% extends "user/base.html" %}
+
+{% block title %}My Orders - Cellar Society{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>My Orders</h2>
+    <p class="subtitle">Track and manage your wine orders</p>
+</div>
+
+<div class="orders-container">
+    <!-- Order Status Tabs -->
+    <div class="order-tabs">
+        <button class="tab-btn active" data-status="all">All</button>
+        <button class="tab-btn" data-status="to_pay">To Pay</button>
+        <button class="tab-btn" data-status="to_ship">To Ship</button>
+        <button class="tab-btn" data-status="to_receive">To Receive</button>
+        <button class="tab-btn" data-status="completed">Completed</button>
+        <button class="tab-btn" data-status="cancelled">Cancelled</button>
+        <button class="tab-btn" data-status="return_refund">Return/Refund</button>
+    </div>
+
+    <!-- Orders Content -->
+    <div class="orders-content">
+        {% if orders %}
+        <div class="orders-list" id="ordersList">
+            {% for order in orders %}
+            <div class="order-card" data-status="{{ order.status }}">
+                <!-- Order Header -->
+                <div class="order-header">
+                    <div class="order-info">
+                        <h3>Order #{{ order.id }}</h3>
+                        <span class="order-date">{{ order.order_date.strftime('%B %d, %Y') }}</span>
+                    </div>
+                    <div class="order-total">
+                        ₱{{ "%.2f"|format(order.total_amount) }}
+                    </div>
+                </div>
+
+                <!-- Order Preview (Collapsed) -->
+                <div class="order-preview" onclick="toggleOrderDetails({{ order.id }})">
+                    <div class="preview-items">
+                        {% for item in order.items %}
+                        <div class="preview-item">
+                            <div class="preview-image">
+                                <img src="{{ item.image_url or '/static/default.png' }}" alt="{{ item.name }}">
+                            </div>
+                            <div class="preview-details">
+                                <h4>{{ item.name }}</h4>
+                                <p class="preview-quantity">Quantity: {{ item.quantity }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="preview-status">
+                        <span class="status-badge status-{{ order.status }}">
+                            {{ order.status.replace('_', ' ').title() }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Order Details (Expanded) -->
+                <div class="order-details" id="orderDetails-{{ order.id }}">
+                    <!-- Shipping Address -->
+                    <div class="detail-section">
+                        <h4>Shipping Address</h4>
+                        <div class="address-card">
+                            <div class="address-line address-name">{{ order.shipping_address.full_name }}</div>
+                            <div class="address-line">{{ order.shipping_address.street_address }}</div>
+                            <div class="address-line">{{ order.shipping_address.city }}, {{ order.shipping_address.state }} {{ order.shipping_address.zip_code }}</div>
+                            <div class="address-line">{{ order.shipping_address.country }}</div>
+                            <div class="address-line">Phone: {{ order.shipping_address.phone_number }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Order Items -->
+                    <div class="detail-section">
+                        <h4>Order Items</h4>
+                        <div class="order-items-container">
+                            <div class="order-items-header">
+                                <div class="header-product">Product</div>
+                                <div class="header-price">Unit Price</div>
+                                <div class="header-quantity">Quantity</div>
+                                <div class="header-total">Total Price</div>
+                            </div>
+                            <div class="order-items-list">
+                                {% for item in order.items %}
+                                <div class="order-item">
+                                    <div class="item-product">
+                                        <div class="product-info">
+                                            <div class="product-image">
+                                                <img src="{{ item.image_url or '/static/default.png' }}" alt="{{ item.name }}">
+                                            </div>
+                                            <div class="product-details">
+                                                <h4>{{ item.name }}</h4>
+                                                <p class="product-type">{{ item.type }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="item-price">
+                                        <span class="unit-price">₱{{ "%.2f"|format(item.price) }}</span>
+                                    </div>
+                                    <div class="item-quantity">
+                                        <span class="quantity">{{ item.quantity }}</span>
+                                    </div>
+                                    <div class="item-total">
+                                        <span class="total-price">₱{{ "%.2f"|format(item.price * item.quantity) }}</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Message to Seller -->
+                    {% if order.seller_message %}
+                    <div class="detail-section">
+                        <h4>Message to Seller</h4>
+                        <div class="message-card">
+                            <p>{{ order.seller_message }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Payment Method -->
+                    <div class="detail-section">
+                        <h4>Payment Method</h4>
+                        <div class="payment-card">
+                            <span class="payment-method">{{ order.payment_method.replace('_', ' ').title() }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Order Summary -->
+                    <div class="detail-section">
+                        <h4>Order Summary</h4>
+                        <div class="summary-card">
+                            <div class="summary-row">
+                                <span>Merchandise Subtotal:</span>
+                                <span>₱{{ "%.2f"|format(order.total_amount - 50) }}</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Shipping Fee:</span>
+                                <span>₱50.00</span>
+                            </div>
+                            <div class="summary-row grand-total">
+                                <span>Total Amount:</span>
+                                <span>₱{{ "%.2f"|format(order.total_amount) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Order Actions -->
+                    <div class="order-actions">
+                        {% if order.status == 'to_pay' %}
+                        <button class="btn cancel-order-btn" onclick="cancelOrder({{ order.id }})">Cancel Order</button>
+                        <button class="btn pending-btn" disabled>Pending</button>
+                        {% elif order.status == 'cancelled' %}
+                        <button class="btn pending-btn" disabled>Cancelled</button>
+                        {% else %}
+                        <button class="btn pending-btn" disabled>{{ order.status.replace('_', ' ').title() }}</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-orders">
+            <div class="empty-icon">📦</div>
+            <h3>No orders yet</h3>
+            <p>Your orders will appear here once you make a purchase</p>
+            <a href="{{ url_for('user_dashboard') }}" class="btn primary">Start Shopping</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .orders-container {
+        background: var(--card-bg);
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+    }
+
+    /* Order Tabs */
+    .order-tabs {
+        display: flex;
+        background: rgba(90, 42, 39, 0.05);
+        border-bottom: 1px solid #e5e0da;
+        overflow-x: auto;
+    }
+
+    .tab-btn {
+        padding: 16px 24px;
+        background: none;
+        border: none;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 500;
+        color: var(--muted);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+        border-bottom: 3px solid transparent;
+    }
+
+    .tab-btn:hover {
+        color: var(--primary);
+        background: rgba(90, 42, 39, 0.1);
+    }
+
+    .tab-btn.active {
+        color: var(--primary);
+        border-bottom-color: var(--accent);
+        background: rgba(90, 42, 39, 0.08);
+    }
+
+    /* Orders Content */
+    .orders-content {
+        padding: 0;
+    }
+
+    .orders-list {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Order Card */
+    .order-card {
+        padding: 25px;
+        border-bottom: 1px solid #f0f0f0;
+        background: var(--card-bg);
+        border-radius: 8px;
+        margin: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .order-card:last-child {
+        border-bottom: none;
+    }
+
+    .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .order-info h3 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 5px;
+        font-size: 1.3em;
+    }
+
+    .order-date {
+        color: var(--muted);
+        font-size: 0.9em;
+    }
+
+    .order-total {
+        font-weight: 600;
+        color: var(--accent);
+        font-size: 1.2em;
+    }
+
+    /* Order Preview */
+    .order-preview {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: rgba(90, 42, 39, 0.03);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-bottom: 15px;
+    }
+
+    .order-preview:hover {
+        background: rgba(90, 42, 39, 0.05);
+    }
+
+    .preview-items {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        flex: 1;
+    }
+
+    .preview-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .preview-image {
+        width: 40px;
+        height: 40px;
+        border-radius: 4px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .preview-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .preview-details h4 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        font-size: 0.9em;
+        margin-bottom: 2px;
+    }
+
+    .preview-quantity {
+        color: var(--muted);
+        font-size: 0.8em;
+    }
+
+    .preview-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-to_pay { background: #fff3cd; color: #856404; }
+    .status-to_ship { background: #cce7ff; color: #004085; }
+    .status-to_receive { background: #d1ecf1; color: #0c5460; }
+    .status-completed { background: #d4edda; color: #155724; }
+    .status-cancelled { background: #f8d7da; color: #721c24; }
+    .status-return_refund { background: #fff3cd; color: #856404; }
+
+    /* Order Details */
+    .order-details {
+        display: none;
+        padding-top: 20px;
+        border-top: 1px solid #e5e0da;
+    }
+
+    .order-details.expanded {
+        display: block;
+    }
+
+    .detail-section {
+        margin-bottom: 25px;
+    }
+
+    .detail-section h4 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 15px;
+        font-size: 1.1em;
+    }
+
+    /* Address Card */
+    .address-card {
+        background: rgba(90, 42, 39, 0.03);
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+    }
+
+    .address-line {
+        margin-bottom: 5px;
+        font-size: 0.95em;
+    }
+
+    .address-name {
+        font-weight: 600;
+        color: var(--primary);
+    }
+
+    /* Order Items */
+    .order-items-container {
+        border: 1px solid #e5e0da;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .order-items-header {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 15px;
+        padding: 15px 20px;
+        background: rgba(90, 42, 39, 0.05);
+        border-bottom: 1px solid #e5e0da;
+        font-weight: 600;
+        color: var(--primary);
+        font-size: 0.9em;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .order-items-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .order-item {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 15px;
+        padding: 15px 20px;
+        border-bottom: 1px solid #f0f0f0;
+        align-items: center;
+    }
+
+    .order-item:last-child {
+        border-bottom: none;
+    }
+
+    .item-product {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .product-image {
+        width: 50px;
+        height: 50px;
+        border-radius: 6px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .product-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-details h4 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 3px;
+        font-size: 0.95em;
+    }
+
+    .product-type {
+        color: var(--muted);
+        font-size: 0.8em;
+    }
+
+    .item-price, .item-quantity, .item-total {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        font-weight: 500;
+    }
+
+    .unit-price, .total-price {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 0.9em;
+    }
+
+    /* Message Card */
+    .message-card {
+        background: rgba(90, 42, 39, 0.03);
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+        font-style: italic;
+    }
+
+    /* Payment Card */
+    .payment-card {
+        background: rgba(90, 42, 39, 0.03);
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+    }
+
+    .payment-method {
+        font-weight: 600;
+        color: var(--primary);
+    }
+
+    /* Summary Card */
+    .summary-card {
+        background: rgba(90, 42, 39, 0.03);
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+    }
+
+    .summary-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 0.95em;
+    }
+
+    .grand-total {
+        font-size: 1.1em;
+        font-weight: 700;
+        color: var(--primary);
+        padding-top: 10px;
+        border-top: 2px solid #e5e0da;
+    }
+
+    /* Order Actions */
+    .order-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 15px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e0da;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        font-size: 0.9em;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .cancel-order-btn {
+        background: transparent;
+        color: var(--muted);
+        border: 2px solid #e5e0da;
+    }
+
+    .cancel-order-btn:hover {
+        background: #5a2a27;
+        color: white;
+        border-color: #5a2a27;
+        transform: translateY(-1px);
+    }
+
+    .pending-btn {
+        background: transparent;
+        color: var(--muted);
+        border: 2px solid #e5e0da;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    /* Empty State */
+    .empty-orders {
+        text-align: center;
+        padding: 60px 40px;
+    }
+
+    .empty-icon {
+        font-size: 80px;
+        margin-bottom: 20px;
+    }
+
+    .empty-orders h3 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 10px;
+        font-size: 1.5em;
+    }
+
+    .empty-orders p {
+        color: var(--muted);
+        margin-bottom: 30px;
+        font-size: 1.1em;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .order-tabs {
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 16px;
+            font-size: 0.85em;
+        }
+
+        .order-preview {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .preview-status {
+            align-self: flex-end;
+        }
+
+        .order-items-header {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .order-item {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .item-product {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .order-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .order-actions .btn {
+            width: 100%;
+        }
+
+        .header-product::before { content: "Product: "; }
+        .header-price::before { content: "Unit Price: "; }
+        .header-quantity::before { content: "Quantity: "; }
+        .header-total::before { content: "Total: "; }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const orderCards = document.querySelectorAll('.order-card');
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Update active tab
+                tabBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                // Filter orders
+                const status = this.dataset.status;
+                filterOrders(status);
+            });
+        });
+
+        function filterOrders(status) {
+            orderCards.forEach(card => {
+                if (status === 'all' || card.dataset.status === status) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+    });
+
+    // Toggle order details
+    function toggleOrderDetails(orderId) {
+        const detailsElement = document.getElementById(`orderDetails-${orderId}`);
+        detailsElement.classList.toggle('expanded');
+    }
+
+    // Order actions
+    function cancelOrder(orderId) {
+        if (confirm('Are you sure you want to cancel this order?')) {
+            fetch('/user/cancel_order/' + orderId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Order cancelled successfully');
+                    location.reload();
+                } else {
+                    alert('Error cancelling order: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error cancelling order');
+            });
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,740 @@
+{% extends "user/base.html" %}
+
+{% block title %}Checkout - Cellar Society{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Checkout</h2>
+    <p class="subtitle">Review your order and complete your purchase</p>
+</div>
+
+<div class="checkout-container">
+    <div class="checkout-layout">
+        <!-- Left Column - Order Details -->
+        <div class="checkout-left">
+            <!-- Shipping Address -->
+            <div class="checkout-section">
+                <h3>Shipping Address</h3>
+                <div class="address-selection">
+                    <select id="addressSelect" name="address_id" required>
+                        <option value="">Select an address</option>
+                        {% for address in addresses %}
+                        <option value="{{ address.id }}" {% if address.is_default %}selected{% endif %}>
+                            {{ address.label }} - {{ address.full_name }}{% if address.is_default %} (Default){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <a href="{{ url_for('user_profile') }}#addresses" class="btn manage-address-btn">Manage Addresses</a>
+                </div>
+                
+                <!-- Selected Address Display -->
+                <div id="selectedAddress" class="selected-address">
+                    {% for address in addresses %}
+                        {% if address.is_default %}
+                        <div class="address-line address-name">{{ address.full_name }}</div>
+                        <div class="address-line">{{ address.street_address }}</div>
+                        <div class="address-line">{{ address.city }}, {{ address.state }} {{ address.zip_code }}</div>
+                        <div class="address-line">{{ address.country }}</div>
+                        <div class="address-line">Phone: {{ address.phone_number }}</div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Order Items -->
+            <div class="checkout-section">
+                <h3>Order Items</h3>
+                <div class="order-items-container">
+                    <!-- Order Items Header -->
+                    <div class="order-items-header">
+                        <div class="header-product">Product</div>
+                        <div class="header-price">Unit Price</div>
+                        <div class="header-quantity">Quantity</div>
+                        <div class="header-total">Total Price</div>
+                    </div>
+                    
+                    <!-- Order Items List -->
+                    <div class="order-items-list">
+                        {% for item in order_items %}
+                        <div class="order-item" data-product-id="{{ item.product_id }}" data-stock="{{ item.stock }}" data-price="{{ item.price }}">
+                            <div class="item-product">
+                                <div class="product-info">
+                                    <div class="product-image">
+                                        <img src="{{ item.image_url or '/static/default.png' }}" alt="{{ item.name }}">
+                                    </div>
+                                    <div class="product-details">
+                                        <h4>{{ item.name }}</h4>
+                                        <p class="product-type">{{ item.type }}</p>
+                                        <p class="stock-info">Stock: {{ item.stock }} available</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="item-price">
+                                <span class="unit-price">₱{{ "%.2f"|format(item.price) }}</span>
+                            </div>
+                            <div class="item-quantity">
+                                <div class="quantity-controls">
+                                    <button class="quantity-btn minus" onclick="updateCheckoutQuantity({{ item.product_id }}, -1)" 
+                                            {% if item.quantity <= 1 %}disabled{% endif %}>-</button>
+                                    <input type="number" class="quantity-input" value="{{ item.quantity }}" min="1" 
+                                           max="{{ item.stock }}" onchange="updateCheckoutQuantityInput({{ item.product_id }}, this)">
+                                    <button class="quantity-btn plus" onclick="updateCheckoutQuantity({{ item.product_id }}, 1)"
+                                            {% if item.quantity >= item.stock %}disabled{% endif %}>+</button>
+                                </div>
+                            </div>
+                            <div class="item-total">
+                                <span class="total-price" id="total-{{ item.product_id }}">₱{{ "%.2f"|format(item.price * item.quantity) }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message to Seller -->
+            <div class="checkout-section">
+                <h3>Message to Seller (Optional)</h3>
+                <textarea name="seller_message" placeholder="Add any special instructions or notes for the seller..." 
+                         rows="3" class="message-textarea"></textarea>
+            </div>
+        </div>
+
+        <!-- Right Column - Order Summary -->
+        <div class="checkout-right">
+            <div class="order-summary-card">
+                <h3>Order Summary</h3>
+                
+                <!-- Payment Method -->
+                <div class="payment-section">
+                    <h4>Payment Method</h4>
+                    <div class="payment-options">
+                        <label class="payment-option">
+                            <input type="radio" name="payment_method" value="cod" checked>
+                            <span>Cash on Delivery (COD)</span>
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="payment_method" value="credit_card">
+                            <span>Credit Card</span>
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="payment_method" value="online_banking">
+                            <span>Online Banking</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Order Total -->
+                <div class="total-section">
+                    <div class="total-row">
+                        <span>Merchandise Subtotal:</span>
+                        <span id="merchandiseSubtotal">₱{{ "%.2f"|format(subtotal) }}</span>
+                    </div>
+                    <div class="total-row">
+                        <span>Shipping Fee:</span>
+                        <span>₱50.00</span>
+                    </div>
+                    <div class="total-row grand-total">
+                        <span>Total Amount:</span>
+                        <span id="grandTotal">₱{{ "%.2f"|format(subtotal + 50) }}</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="checkout-actions">
+                    <form action="/user/place_order" method="POST" id="placeOrderForm">
+                        <input type="hidden" name="address_id" id="finalAddressId">
+                        <input type="hidden" name="payment_method" id="finalPaymentMethod">
+                        <input type="hidden" name="seller_message" id="finalSellerMessage">
+                        <input type="hidden" name="order_data" id="finalOrderData" value="{{ order_data|tojson }}">
+                        
+                        <button type="submit" class="btn primary place-order-btn">
+                            Place Order
+                        </button>
+                    </form>
+                    
+                    <button class="btn cancel-btn" onclick="cancelCheckout()">Cancel</button>
+                </div>
+
+                <p class="security-note">
+                    🔒 Your order is secure and encrypted
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .checkout-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .checkout-layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 30px;
+        align-items: start;
+    }
+
+    .checkout-section {
+        background: var(--card-bg);
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        margin-bottom: 20px;
+    }
+
+    .checkout-section h3 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        border-bottom: 2px solid #e5e0da;
+        padding-bottom: 10px;
+    }
+
+    /* Address Selection */
+    .address-selection {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        align-items: center;
+    }
+
+    #addressSelect {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #e5e0da;
+        border-radius: 8px;
+        font-family: 'Poppins', sans-serif;
+        font-size: 14px;
+        background: white;
+    }
+
+    .manage-address-btn {
+        background: transparent;
+        color: var(--accent);
+        border: none;
+        padding: 12px 20px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        border-radius: 8px;
+    }
+
+    .manage-address-btn:hover {
+        text-decoration: underline;
+        background: rgba(198, 166, 100, 0.1);
+    }
+
+    .selected-address {
+        background: rgba(90, 42, 39, 0.05);
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid var(--accent);
+    }
+
+    .address-line {
+        margin-bottom: 8px;
+        font-size: 0.95em;
+    }
+
+    .address-name {
+        font-weight: 600;
+        color: var(--primary);
+        font-size: 1.1em;
+    }
+
+    /* Order Items Container */
+    .order-items-container {
+        border: 1px solid #e5e0da;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .order-items-header {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 15px;
+        padding: 15px 20px;
+        background: rgba(90, 42, 39, 0.05);
+        border-bottom: 1px solid #e5e0da;
+        font-weight: 600;
+        color: var(--primary);
+        font-size: 0.9em;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .order-items-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .order-item {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 15px;
+        padding: 20px;
+        border-bottom: 1px solid #f0f0f0;
+        align-items: center;
+    }
+
+    .order-item:last-child {
+        border-bottom: none;
+    }
+
+    .item-product {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .product-image {
+        width: 60px;
+        height: 60px;
+        border-radius: 6px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .product-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-details h4 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 5px;
+        font-size: 1em;
+    }
+
+    .product-type {
+        color: var(--muted);
+        font-size: 0.85em;
+        margin-bottom: 3px;
+    }
+
+    .stock-info {
+        color: var(--muted);
+        font-size: 0.8em;
+    }
+
+    /* Aligned Number Columns */
+    .item-price, .item-quantity, .item-total {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        font-weight: 500;
+    }
+
+    .unit-price, .total-price {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 1em;
+    }
+
+    /* Quantity Controls */
+    .quantity-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: center;
+    }
+
+    .quantity-btn {
+        width: 30px;
+        height: 30px;
+        border: 2px solid #e5e0da;
+        background: white;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        font-size: 0.9em;
+    }
+
+    .quantity-btn:hover:not(:disabled) {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+    }
+
+    .quantity-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .quantity-input {
+        width: 50px;
+        height: 30px;
+        border: 2px solid #e5e0da;
+        border-radius: 6px;
+        text-align: center;
+        font-family: 'Poppins', sans-serif;
+        font-size: 0.9em;
+    }
+
+    .quantity-input:focus {
+        border-color: var(--accent);
+        outline: none;
+    }
+
+    /* Message Textarea */
+    .message-textarea {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e5e0da;
+        border-radius: 8px;
+        font-family: 'Poppins', sans-serif;
+        font-size: 14px;
+        resize: vertical;
+        min-height: 80px;
+    }
+
+    .message-textarea:focus {
+        border-color: var(--accent);
+        outline: none;
+    }
+
+    /* Order Summary Card */
+    .order-summary-card {
+        background: var(--card-bg);
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        position: sticky;
+        top: 20px;
+    }
+
+    .order-summary-card h3 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary);
+        margin-bottom: 20px;
+        text-align: center;
+        font-size: 1.4em;
+    }
+
+    /* Payment Options */
+    .payment-section {
+        margin-bottom: 25px;
+    }
+
+    .payment-section h4 {
+        font-family: 'Poppins', sans-serif;
+        color: var(--primary);
+        margin-bottom: 15px;
+        font-size: 1.1em;
+    }
+
+    .payment-options {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .payment-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        border: 2px solid #e5e0da;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .payment-option:hover {
+        border-color: var(--accent);
+        background: rgba(198, 166, 100, 0.05);
+    }
+
+    .payment-option input[type="radio"] {
+        accent-color: var(--primary);
+    }
+
+    .payment-option span {
+        font-weight: 500;
+        color: var(--text);
+    }
+
+    /* Total Section */
+    .total-section {
+        border-top: 2px solid #e5e0da;
+        padding-top: 20px;
+        margin-bottom: 25px;
+    }
+
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        font-size: 1em;
+    }
+
+    .grand-total {
+        font-size: 1.3em;
+        font-weight: 700;
+        color: var(--primary);
+        padding-top: 15px;
+        border-top: 2px solid #e5e0da;
+    }
+
+    /* Checkout Actions */
+    .checkout-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .place-order-btn {
+        width: 100%;
+        padding: 16px 24px;
+        border: none;
+        border-radius: 8px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        font-size: 1.1em;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: var(--primary);
+        color: white;
+    }
+
+    .place-order-btn:hover {
+        background: #6a302c;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(90, 42, 39, 0.3);
+    }
+
+    .cancel-btn {
+        width: 100%;
+        padding: 12px 24px;
+        background: transparent;
+        color: var(--muted);
+        border: 2px solid #e5e0da;
+        border-radius: 8px;
+        font-family: 'Poppins', sans-serif;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        white-space: nowrap;
+    }
+
+    .cancel-btn:hover {
+        background: #5a2a27;
+        color: #fff;
+        border-color: #5a2a27;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(90, 42, 39, 0.25);
+    }
+
+    .security-note {
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.9em;
+        margin-top: 15px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .checkout-layout {
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .checkout-section {
+            padding: 20px;
+        }
+
+        .address-selection {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .order-items-header {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .order-item {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .item-product {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .quantity-controls {
+            justify-content: center;
+        }
+
+        .order-summary-card {
+            position: static;
+        }
+
+        .header-product::before { content: "Product: "; }
+        .header-price::before { content: "Unit Price: "; }
+        .header-quantity::before { content: "Quantity: "; }
+        .header-total::before { content: "Total: "; }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Address data from backend
+    const addresses = {{ addresses|tojson }};
+    const orderData = {{ order_data|tojson }};
+
+    // Update selected address display when dropdown changes
+    document.getElementById('addressSelect').addEventListener('change', function() {
+        const addressId = this.value;
+        const container = document.getElementById('selectedAddress');
+        
+        if (addressId) {
+            const selectedAddress = addresses.find(addr => addr.id == addressId);
+            if (selectedAddress) {
+                container.innerHTML = `
+                    <div class="address-line address-name">${selectedAddress.full_name}</div>
+                    <div class="address-line">${selectedAddress.street_address}</div>
+                    <div class="address-line">${selectedAddress.city}, ${selectedAddress.state} ${selectedAddress.zip_code}</div>
+                    <div class="address-line">${selectedAddress.country}</div>
+                    <div class="address-line">Phone: ${selectedAddress.phone_number}</div>
+                `;
+            }
+        } else {
+            container.innerHTML = '<div class="address-line" style="color: var(--muted);">Please select a shipping address</div>';
+        }
+        
+        // Update the form field
+        document.getElementById('finalAddressId').value = addressId;
+    });
+
+    // Update payment method
+    document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            document.getElementById('finalPaymentMethod').value = this.value;
+        });
+    });
+
+    // Update seller message
+    document.querySelector('textarea[name="seller_message"]').addEventListener('input', function() {
+        document.getElementById('finalSellerMessage').value = this.value;
+    });
+
+    // Quantity adjustment functions
+    function updateCheckoutQuantity(productId, change) {
+        const quantityInput = document.querySelector(`.order-item[data-product-id="${productId}"] .quantity-input`);
+        if (!quantityInput) return;
+        
+        let newQuantity = parseInt(quantityInput.value) + change;
+        const maxStock = parseInt(quantityInput.max);
+        
+        newQuantity = Math.max(1, newQuantity);
+        newQuantity = Math.min(newQuantity, maxStock);
+        
+        if (newQuantity !== parseInt(quantityInput.value)) {
+            quantityInput.value = newQuantity;
+            updateCheckoutTotals(productId, newQuantity);
+        }
+    }
+
+    function updateCheckoutQuantityInput(productId, inputElement) {
+        let newQuantity = parseInt(inputElement.value);
+        if (isNaN(newQuantity) || newQuantity < 1) {
+            newQuantity = 1;
+        }
+        newQuantity = Math.min(newQuantity, parseInt(inputElement.max));
+        
+        inputElement.value = newQuantity;
+        updateCheckoutTotals(productId, newQuantity);
+    }
+
+    function updateCheckoutTotals(productId, quantity) {
+        // Update individual item total
+        const orderItem = document.querySelector(`.order-item[data-product-id="${productId}"]`);
+        const price = parseFloat(orderItem.dataset.price);
+        const totalElement = document.getElementById(`total-${productId}`);
+        
+        totalElement.textContent = `₱${(price * quantity).toFixed(2)}`;
+        
+        // Update buttons state
+        const minusBtn = orderItem.querySelector('.quantity-btn.minus');
+        const plusBtn = orderItem.querySelector('.quantity-btn.plus');
+        
+        minusBtn.disabled = quantity <= 1;
+        plusBtn.disabled = quantity >= parseInt(orderItem.dataset.stock);
+        
+        // Update order data and recalculate totals
+        updateOrderDataAndTotals();
+    }
+
+    function updateOrderDataAndTotals() {
+        let merchandiseSubtotal = 0;
+        
+        // Update order data with new quantities
+        document.querySelectorAll('.order-item').forEach(item => {
+            const productId = parseInt(item.dataset.productId);
+            const quantity = parseInt(item.querySelector('.quantity-input').value);
+            const price = parseFloat(item.dataset.price);
+            
+            // Update the order data
+            const itemIndex = orderData.items.findIndex(item => item.product_id === productId);
+            if (itemIndex !== -1) {
+                orderData.items[itemIndex].quantity = quantity;
+            }
+            
+            merchandiseSubtotal += price * quantity;
+        });
+        
+        // Update the hidden form field
+        document.getElementById('finalOrderData').value = JSON.stringify(orderData);
+        
+        // Update displayed totals
+        const shippingFee = 50.00;
+        const grandTotal = merchandiseSubtotal + shippingFee;
+        
+        document.getElementById('merchandiseSubtotal').textContent = `₱${merchandiseSubtotal.toFixed(2)}`;
+        document.getElementById('grandTotal').textContent = `₱${grandTotal.toFixed(2)}`;
+    }
+
+    function cancelCheckout() {
+        // Redirect based on whether it was buy now or cart checkout
+        if (orderData.buy_now) {
+            window.location.href = '/user/dashboard';
+        } else {
+            window.location.href = '/user/cart';
+        }
+    }
+
+    // Set initial values
+    document.addEventListener('DOMContentLoaded', function() {
+        const initialAddressId = document.getElementById('addressSelect').value;
+        document.getElementById('finalAddressId').value = initialAddressId;
+        document.getElementById('finalPaymentMethod').value = 'cod';
+        document.getElementById('finalOrderData').value = JSON.stringify(orderData);
+    });
+</script>
+{% endblock %}
